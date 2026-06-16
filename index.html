@@ -64,6 +64,11 @@
     th,td { height:46px; padding:8px 10px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     th:last-child,td:last-child { border-right:0; }
     th { background:#f8fafc; color:var(--muted); font-size:12px; position:sticky; top:0; z-index:1; font-weight:800; }
+    .sort-btn { width:100%; min-height:28px; display:flex; align-items:center; justify-content:space-between; gap:6px; padding:0; border:0; background:transparent; color:inherit; font:inherit; text-align:left; cursor:pointer; }
+    .sort-btn::after { content:"↕"; color:#cbd5e1; font-size:11px; }
+    .sort-btn.active { color:var(--blue); }
+    .sort-btn.active.asc::after { content:"▲"; color:var(--blue); }
+    .sort-btn.active.desc::after { content:"▼"; color:var(--blue); }
     th:nth-child(1),td:nth-child(1) { width:170px; text-align:left; }
     th:nth-child(2),td:nth-child(2) { width:78px; }
     th:nth-child(3),td:nth-child(3) { width:78px; }
@@ -228,7 +233,7 @@
           <table>
             <thead>
               <tr>
-                <th>라이선스키</th><th>앱 이름</th><th>상태</th><th>고객명</th><th>네이버 아이디</th><th>연락처</th><th>주문번호</th><th>등록 기기</th><th>발급일</th><th>인증일</th><th>최근 확인일</th><th>기기해제일</th><th>메모</th><th>관리</th>
+                <th><button class="sort-btn" data-sort="license_key" type="button">라이선스키</button></th><th><button class="sort-btn" data-sort="app_name" type="button">앱 이름</button></th><th><button class="sort-btn" data-sort="status" type="button">상태</button></th><th><button class="sort-btn" data-sort="customer_name" type="button">고객명</button></th><th><button class="sort-btn" data-sort="naver_id" type="button">네이버 아이디</button></th><th><button class="sort-btn" data-sort="customer_phone" type="button">연락처</button></th><th><button class="sort-btn" data-sort="order_number" type="button">주문번호</button></th><th><button class="sort-btn" data-sort="device_id" type="button">등록 기기</button></th><th><button class="sort-btn" data-sort="issued_at" type="button">발급일</button></th><th><button class="sort-btn" data-sort="activated_at" type="button">인증일</button></th><th><button class="sort-btn" data-sort="last_verified_at" type="button">최근 확인일</button></th><th><button class="sort-btn" data-sort="reset_at" type="button">기기해제일</button></th><th><button class="sort-btn" data-sort="memo" type="button">메모</button></th><th>관리</th>
               </tr>
             </thead>
             <tbody id="tableBody"></tbody>
@@ -251,6 +256,7 @@
     let rows = [];
     let createdKeys = [];
     let timer = null;
+    let sortState = { key: "", direction: "" };
     const PREF_KEYS = {
       rememberEmail: "gosione_admin_remember_email",
       savedEmail: "gosione_admin_saved_email",
@@ -431,14 +437,16 @@
     }
 
     function renderRows() {
-      document.getElementById("tableBody").innerHTML = rows.map(row => `
+      const sortedRows = sortedLicenseRows();
+      renderSortHeaders();
+      document.getElementById("tableBody").innerHTML = sortedRows.map(row => `
         <tr>
           <td><strong>${esc(row.license_key)}</strong></td><td>${esc(row.app_name)}</td><td>${badge(row.status)}</td>
           <td>${esc(row.customer_name)}</td><td>${esc(row.naver_id)}</td><td>${esc(row.customer_phone)}</td><td>${esc(row.order_number)}</td><td>${esc(row.device_id)}</td>
           <td>${fmt(row.issued_at)}</td><td>${fmt(row.activated_at)}</td><td>${fmt(row.last_verified_at)}</td><td>${fmt(row.reset_at)}</td>
           <td>${esc(row.memo)}</td><td>${actions(row)}</td>
         </tr>`).join("");
-      document.getElementById("cardList").innerHTML = rows.map(row => `
+      document.getElementById("cardList").innerHTML = sortedRows.map(row => `
         <details class="license-card">
           <summary class="license-card-head">
             <div class="license-card-title">
@@ -467,6 +475,71 @@
           </div>
         </details>`).join("");
     }
+
+    function sortedLicenseRows() {
+      if (!sortState.key || !sortState.direction) return rows.slice();
+      const direction = sortState.direction === "desc" ? -1 : 1;
+      return rows.slice().sort((a, b) => compareRows(a, b, sortState.key) * direction);
+    }
+
+    function compareRows(a, b, key) {
+      if (["issued_at", "activated_at", "last_verified_at", "reset_at"].includes(key)) {
+        return compareDate(a[key], b[key]);
+      }
+      if (key === "status") {
+        const order = { unused: 1, used: 2, blocked: 3 };
+        return compareValue(order[a.status] || 99, order[b.status] || 99);
+      }
+      return compareValue(a[key], b[key]);
+    }
+
+    function compareDate(a, b) {
+      const at = dateTimeValue(a);
+      const bt = dateTimeValue(b);
+      if (at === bt) return 0;
+      if (!at) return 1;
+      if (!bt) return -1;
+      return at - bt;
+    }
+
+    function dateTimeValue(value) {
+      if (!value) return 0;
+      const raw = String(value);
+      const iso = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw) ? raw : raw + "Z";
+      const time = new Date(iso).getTime();
+      return Number.isFinite(time) ? time : 0;
+    }
+
+    function compareValue(a, b) {
+      const av = String(a || "").trim();
+      const bv = String(b || "").trim();
+      if (!av && !bv) return 0;
+      if (!av) return 1;
+      if (!bv) return -1;
+      return av.localeCompare(bv, "ko", { numeric: true, sensitivity: "base" });
+    }
+
+    function setSort(key) {
+      if (sortState.key !== key) sortState = { key, direction: "asc" };
+      else if (sortState.direction === "asc") sortState.direction = "desc";
+      else if (sortState.direction === "desc") sortState = { key: "", direction: "" };
+      else sortState.direction = "asc";
+      renderRows();
+    }
+
+    function renderSortHeaders() {
+      document.querySelectorAll("[data-sort]").forEach(btn => {
+        const active = btn.dataset.sort === sortState.key && sortState.direction;
+        btn.className = "sort-btn" + (active ? " active " + sortState.direction : "");
+        btn.setAttribute("aria-sort", active ? (sortState.direction === "asc" ? "ascending" : "descending") : "none");
+      });
+    }
+
+    document.addEventListener("click", event => {
+      const sortButton = event.target.closest("[data-sort]");
+      if (!sortButton) return;
+      setSort(sortButton.dataset.sort);
+    });
 
     function badge(status) {
       return `<span class="badge ${status}">${statusLabel[status] || status}</span>`;
