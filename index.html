@@ -85,10 +85,16 @@
     .actions { display:grid; grid-template-columns:repeat(5,max-content); align-items:center; gap:6px; min-width:0; }
     .actions .btn { min-height:32px; padding:0 9px; font-size:12px; border-radius:8px; white-space:nowrap; line-height:1; }
     .cards { display:none; gap:10px; }
-    .license-card { border:1px solid var(--line); border-radius:12px; padding:12px; background:#fff; display:grid; gap:10px; }
-    .license-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .license-card { border:1px solid var(--line); border-radius:12px; background:#fff; overflow:hidden; }
+    .license-card summary { list-style:none; cursor:pointer; }
+    .license-card summary::-webkit-details-marker { display:none; }
+    .license-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:12px; }
     .license-card-title { min-width:0; display:grid; gap:4px; }
     .license-card-app { color:var(--muted); font-size:12px; font-weight:800; }
+    .license-card-hint { display:inline-flex; align-items:center; justify-content:center; min-height:26px; padding:0 9px; border-radius:999px; background:#f1f5f9; color:var(--muted); font-size:12px; font-weight:800; }
+    .license-card[open] .license-card-hint { background:#e0f2fe; color:#0369a1; font-size:0; }
+    .license-card[open] .license-card-hint::after { content:"접기"; font-size:12px; }
+    .license-card-detail { display:grid; gap:10px; padding:0 12px 12px; border-top:1px solid var(--line); }
     .license-meta { display:grid; grid-template-columns:78px minmax(0,1fr); gap:5px 8px; color:var(--muted); line-height:1.45; }
     .license-meta strong { color:var(--text); font-size:12px; }
     .license-meta span { min-width:0; overflow-wrap:anywhere; }
@@ -433,28 +439,33 @@
           <td>${esc(row.memo)}</td><td>${actions(row)}</td>
         </tr>`).join("");
       document.getElementById("cardList").innerHTML = rows.map(row => `
-        <div class="license-card">
-          <div class="license-card-head">
+        <details class="license-card">
+          <summary class="license-card-head">
             <div class="license-card-title">
               <div class="license-key">${esc(row.license_key)}</div>
-              <div class="license-card-app">${esc(row.app_name || "-")}</div>
+              <div class="license-card-app">${esc(row.app_name || "-")} · ${esc(row.customer_name || "고객명 없음")}</div>
             </div>
-            ${badge(row.status)}
+            <div style="display:grid; gap:6px; justify-items:end">
+              ${badge(row.status)}
+              <span class="license-card-hint">상세보기</span>
+            </div>
+          </summary>
+          <div class="license-card-detail">
+            <div class="license-meta">
+              <strong>고객명</strong><span>${esc(row.customer_name || "-")}</span>
+              <strong>네이버ID</strong><span>${esc(row.naver_id || "-")}</span>
+              <strong>연락처</strong><span>${esc(row.customer_phone || "-")}</span>
+              <strong>주문번호</strong><span>${esc(row.order_number || "-")}</span>
+              <strong>기기</strong><span>${esc(row.device_id || "-")}</span>
+              <strong>발급일</strong><span>${fmt(row.issued_at) || "-"}</span>
+              <strong>활성</strong><span>${fmt(row.activated_at) || "-"}</span>
+              <strong>확인</strong><span>${fmt(row.last_verified_at) || "-"}</span>
+              <strong>해제일</strong><span>${fmt(row.reset_at) || "-"}</span>
+              <strong>메모</strong><span>${esc(row.memo || "-")}</span>
+            </div>
+            ${actions(row)}
           </div>
-          <div class="license-meta">
-            <strong>고객명</strong><span>${esc(row.customer_name || "-")}</span>
-            <strong>네이버ID</strong><span>${esc(row.naver_id || "-")}</span>
-            <strong>연락처</strong><span>${esc(row.customer_phone || "-")}</span>
-            <strong>주문번호</strong><span>${esc(row.order_number || "-")}</span>
-            <strong>기기</strong><span>${esc(row.device_id || "-")}</span>
-            <strong>발급일</strong><span>${fmt(row.issued_at) || "-"}</span>
-            <strong>활성</strong><span>${fmt(row.activated_at) || "-"}</span>
-            <strong>확인</strong><span>${fmt(row.last_verified_at) || "-"}</span>
-            <strong>해제일</strong><span>${fmt(row.reset_at) || "-"}</span>
-            <strong>메모</strong><span>${esc(row.memo || "-")}</span>
-          </div>
-          ${actions(row)}
-        </div>`).join("");
+        </details>`).join("");
     }
 
     function badge(status) {
