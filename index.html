@@ -1,0 +1,575 @@
+﻿<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>공용 라이선스 관리</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg:#f2f4f8; --panel:#fff; --text:#17202a; --muted:#6b7280; --line:#d8dde6;
+      --blue:#0a84ff; --green:#22c55e; --red:#ef4444; --gray:#64748b; --soft:#eef2f7;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",Arial,sans-serif;
+    }
+    * { box-sizing:border-box; }
+    html { -webkit-text-size-adjust:100%; }
+    body { margin:0; background:var(--bg); color:var(--text); font-size:14px; min-width:0; }
+    button,input,select,textarea { font:inherit; }
+    button { border:0; cursor:pointer; border-radius:10px; min-height:40px; padding:0 14px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; line-height:1; text-align:center; }
+    .btn { background:var(--soft); color:var(--text); }
+    .btn.primary { background:var(--blue); color:#fff; }
+    .btn.danger { background:#fee2e2; color:var(--red); }
+    .btn.green { background:#dcfce7; color:#15803d; }
+    .wrap { width:100%; margin:0 auto; padding:20px 28px; }
+    header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
+    h1 { margin:0; font-size:24px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.04); margin-bottom:14px; }
+    .login { max-width:420px; margin:10vh auto 0; }
+    .grid { display:grid; gap:10px; }
+    .grid.two { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .grid.four { grid-template-columns:repeat(4,minmax(0,1fr)); }
+    .grid.six { grid-template-columns:1.15fr .55fr repeat(4,minmax(0,1fr)); }
+    label { color:var(--muted); font-size:12px; font-weight:700; display:grid; gap:6px; }
+    input,select,textarea { width:100%; min-height:40px; border:1px solid var(--line); border-radius:10px; padding:9px 10px; background:#fff; color:var(--text); }
+    textarea { min-height:78px; resize:vertical; }
+    .summary { grid-template-columns:repeat(6,minmax(0,1fr)); }
+    .stat { background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:12px; }
+    .stat span { color:var(--muted); font-size:12px; }
+    .stat strong { display:block; margin-top:4px; font-size:22px; }
+    .filters { position:sticky; top:0; z-index:2; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .header-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:8px; }
+    .usage-chip { min-height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; border:1px solid var(--line); border-radius:10px; background:#fff; color:var(--text); font-size:12px; font-weight:800; white-space:nowrap; }
+    .usage-chip span { color:var(--muted); font-weight:700; }
+    .usage-panel { display:grid; gap:12px; }
+    .usage-head { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }
+    .usage-head h2 { margin:0; font-size:18px; }
+    .usage-head .muted { font-size:12px; text-align:right; }
+    .usage-bars { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+    .usage-card { border:1px solid var(--line); border-radius:8px; background:#f8fafc; padding:12px; display:grid; gap:8px; }
+    .usage-title { display:flex; justify-content:space-between; gap:8px; color:var(--muted); font-size:12px; font-weight:800; }
+    .usage-value { font-size:22px; font-weight:900; color:var(--text); }
+    .usage-limit { color:var(--muted); font-size:12px; font-weight:700; }
+    .bar { height:10px; overflow:hidden; border-radius:999px; background:#e5e7eb; }
+    .bar > span { display:block; height:100%; width:0; border-radius:inherit; background:var(--blue); transition:width .2s ease; }
+    .usage-card.warn .bar > span { background:#f59e0b; }
+    .usage-card.danger .bar > span { background:var(--red); }
+    .usage-card.warn .usage-value { color:#b45309; }
+    .usage-card.danger .usage-value { color:var(--red); }
+    .login-options { display:flex; flex-wrap:wrap; gap:12px; align-items:center; color:var(--muted); font-size:13px; font-weight:700; }
+    .check-row { display:inline-flex; align-items:center; gap:7px; cursor:pointer; }
+    .check-row input { width:auto; min-height:auto; }
+    .table-wrap { overflow:auto; border:1px solid var(--line); border-radius:8px; max-height:66vh; }
+    table { width:100%; border-collapse:collapse; min-width:1720px; background:#fff; table-layout:fixed; }
+    th,td { height:46px; padding:8px 10px; border-right:1px solid var(--line); border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    th:last-child,td:last-child { border-right:0; }
+    th { background:#f8fafc; color:var(--muted); font-size:12px; position:sticky; top:0; z-index:1; font-weight:800; }
+    th:nth-child(1),td:nth-child(1) { width:170px; text-align:left; }
+    th:nth-child(2),td:nth-child(2) { width:78px; }
+    th:nth-child(3),td:nth-child(3) { width:78px; }
+    th:nth-child(4),td:nth-child(4) { width:96px; text-align:left; }
+    th:nth-child(5),td:nth-child(5) { width:112px; text-align:left; }
+    th:nth-child(6),td:nth-child(6) { width:112px; }
+    th:nth-child(7),td:nth-child(7) { width:112px; }
+    th:nth-child(8),td:nth-child(8) { width:150px; }
+    th:nth-child(9),td:nth-child(9),
+    th:nth-child(10),td:nth-child(10),
+    th:nth-child(11),td:nth-child(11),
+    th:nth-child(12),td:nth-child(12),
+    th:nth-child(13),td:nth-child(13) { width:130px; text-align:left; }
+    th:nth-child(14),td:nth-child(14) { width:450px; text-align:left; overflow:visible; }
+    .badge { display:inline-flex; min-height:24px; align-items:center; justify-content:center; border-radius:999px; padding:0 9px; font-size:12px; font-weight:800; line-height:1; vertical-align:middle; }
+    .badge.unused { background:#e5e7eb; color:#374151; }
+    .badge.used { background:#dcfce7; color:#15803d; }
+    .badge.blocked { background:#fee2e2; color:#b91c1c; }
+    .actions { display:grid; grid-template-columns:repeat(5,max-content); align-items:center; gap:6px; min-width:0; }
+    .actions .btn { min-height:32px; padding:0 9px; font-size:12px; border-radius:8px; white-space:nowrap; line-height:1; }
+    .cards { display:none; gap:10px; }
+    .license-card { border:1px solid var(--line); border-radius:12px; padding:12px; background:#fff; display:grid; gap:10px; }
+    .license-card-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+    .license-card-title { min-width:0; display:grid; gap:4px; }
+    .license-card-app { color:var(--muted); font-size:12px; font-weight:800; }
+    .license-meta { display:grid; grid-template-columns:78px minmax(0,1fr); gap:5px 8px; color:var(--muted); line-height:1.45; }
+    .license-meta strong { color:var(--text); font-size:12px; }
+    .license-meta span { min-width:0; overflow-wrap:anywhere; }
+    .license-key { font-weight:900; letter-spacing:.5px; word-break:break-all; }
+    .muted { color:var(--muted); }
+    .message { min-height:22px; color:var(--red); font-size:13px; font-weight:700; }
+    .toast { position:fixed; left:50%; bottom:18px; transform:translateX(-50%); background:#111827; color:#fff; padding:10px 14px; border-radius:999px; display:none; z-index:10; }
+    .toast.show { display:block; }
+    @media (max-width:760px) {
+      .wrap { padding:10px; }
+      body { font-size:13px; }
+      header { align-items:stretch; flex-direction:column; gap:10px; margin-bottom:10px; }
+      h1 { font-size:21px; line-height:1.25; }
+      .panel { padding:12px; border-radius:8px; margin-bottom:10px; }
+      .login { margin:7vh auto 0; }
+      .grid.two { grid-template-columns:1fr; }
+      .grid.four { grid-template-columns:1fr 1fr; }
+      .grid.four label:first-child,
+      .grid.four label:last-child { grid-column:1/-1; }
+      .grid.six { grid-template-columns:minmax(0,1fr) 88px; }
+      .grid.six label:nth-child(n+3) { grid-column:1/-1; }
+      .summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .usage-bars { grid-template-columns:1fr; }
+      .usage-head { align-items:flex-start; flex-direction:column; }
+      .usage-head .muted { text-align:left; }
+      .summary { gap:8px; }
+      .stat { padding:10px; }
+      .stat strong { font-size:19px; }
+      .filters { position:static; }
+      .toolbar { display:grid; grid-template-columns:1fr 1fr; }
+      .toolbar input,
+      .toolbar button { grid-column:1/-1; }
+      .header-actions { justify-content:stretch; }
+      .header-actions > * { width:100%; }
+      .usage-chip { justify-content:center; }
+      .login-options { display:grid; grid-template-columns:1fr; }
+      input,select,textarea,button { min-height:44px; }
+      button { width:100%; }
+      .table-wrap { display:none; }
+      .cards { display:grid; }
+      .license-card { border-radius:8px; }
+      .license-card-head .badge { flex:0 0 auto; }
+      .license-key { font-size:13px; line-height:1.45; }
+      .actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); min-width:0; }
+      .actions .btn { min-height:40px; font-size:13px; }
+      .actions .btn.primary,
+      .actions .btn.danger { grid-column:1/-1; }
+    }
+    @media (max-width:420px) {
+      .wrap { padding:10px; }
+      .grid.four,.grid.six,.toolbar { grid-template-columns:1fr; }
+      .grid.four label:first-child,
+      .grid.four label:last-child,
+      .grid.six label:nth-child(n+3) { grid-column:auto; }
+      .actions { grid-template-columns:1fr; }
+      .license-card-head { flex-direction:column; }
+      .license-meta { grid-template-columns:70px minmax(0,1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="panel login" id="loginPanel">
+      <h1>공용 라이선스 관리</h1>
+      <p class="muted">관리자 계정으로 로그인하세요.</p>
+      <div class="grid">
+        <label>이메일<input id="email" type="email" autocomplete="username"></label>
+        <label>비밀번호<input id="password" type="password" autocomplete="current-password" onkeydown="if(event.key === 'Enter') login()"></label>
+        <div class="login-options">
+          <label class="check-row"><input id="rememberEmail" type="checkbox"> ID 저장</label>
+          <label class="check-row"><input id="autoLogin" type="checkbox" checked> 자동로그인</label>
+        </div>
+        <div class="message" id="loginMessage"></div>
+        <button class="btn primary" id="loginButton" onclick="login()">로그인</button>
+      </div>
+    </section>
+
+    <main id="adminApp" style="display:none">
+      <header>
+        <div>
+          <h1>공용 라이선스 관리</h1>
+          <div class="muted">기본 앱: 고시ONE, 인건비서 / app_id: gosione, ingunbiseo</div>
+        </div>
+        <div class="header-actions">
+          <div class="usage-chip" id="usageBadge">Supabase 사용량 <span>확인 중</span></div>
+          <button class="btn primary" onclick="openSupabaseUsage()">Supabase 열기</button>
+          <button class="btn danger" onclick="logout()">로그아웃</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="grid summary" id="summary"></div>
+      </section>
+
+      <section class="panel usage-panel">
+        <div class="usage-head">
+          <h2>Supabase 사용량 확인</h2>
+          <div class="muted">정확한 무료 한도는 Supabase 대시보드의 Usage/Billing 메뉴에서 확인하세요.</div>
+        </div>
+        <div class="usage-bars" id="usageBars"></div>
+      </section>
+
+      <section class="panel">
+        <h2>라이선스 생성</h2>
+        <div class="grid six">
+          <label>앱 선택<select id="createApp"><option value="gosione|고시ONE">고시ONE</option><option value="ingunbiseo|인건비서">인건비서</option></select></label>
+          <label>수량<input id="quantity" type="number" min="1" max="500" value="1"></label>
+          <label>고객명<input id="customerName"></label>
+          <label>네이버 아이디<input id="naverId"></label>
+          <label>연락처<input id="customerPhone"></label>
+          <label>주문번호<input id="orderNumber"></label>
+          <label style="grid-column:1/-1">메모<textarea id="memo"></textarea></label>
+        </div>
+        <div class="toolbar" style="margin-top:10px">
+          <button class="btn primary" onclick="createLicenses()">생성</button>
+          <button class="btn" onclick="copyCreatedKeys()">생성된 키 복사</button>
+        </div>
+      </section>
+
+      <section class="panel filters">
+        <div class="grid four">
+          <label>검색<input id="query" placeholder="키, 고객명, 네이버ID, 연락처, 주문번호" oninput="debouncedLoad()"></label>
+          <label>상태<select id="statusFilter" onchange="loadLicenses()"><option value="">전체</option><option value="unused">사용 전</option><option value="used">사용 중</option><option value="blocked">사용 정지</option></select></label>
+          <label>앱<select id="appFilter" onchange="loadLicenses()"><option value="">전체 앱</option><option value="gosione">고시ONE</option><option value="ingunbiseo">인건비서</option></select></label>
+          <label>&nbsp;<button class="btn" onclick="loadLicenses()">새로고침</button></label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>라이선스키</th><th>앱 이름</th><th>상태</th><th>고객명</th><th>네이버 아이디</th><th>연락처</th><th>주문번호</th><th>등록 기기</th><th>발급일</th><th>인증일</th><th>최근 확인일</th><th>기기해제일</th><th>메모</th><th>관리</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+        <div class="cards" id="cardList"></div>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const CONFIG = {
+      SUPABASE_URL: "https://ujmyjwxtsoazluyktwcl.supabase.co",
+      SUPABASE_ANON_KEY: "sb_publishable_G4XQjZFkhaV6N_bVy65How_BlC5rQeE",
+      ADMIN_FUNCTION_URL: "https://ujmyjwxtsoazluyktwcl.functions.supabase.co/license-admin",
+      PROJECT_REF: "ujmyjwxtsoazluyktwcl",
+    };
+    const supabaseClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+    let rows = [];
+    let createdKeys = [];
+    let timer = null;
+    const PREF_KEYS = {
+      rememberEmail: "gosione_admin_remember_email",
+      savedEmail: "gosione_admin_saved_email",
+      autoLogin: "gosione_admin_auto_login",
+    };
+
+    const statusLabel = { unused: "사용 전", used: "사용 중", blocked: "사용 정지" };
+    function fmt(v) {
+      if (!v) return "";
+      const raw = String(v);
+      const iso = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw) ? raw : raw + "Z";
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return raw.replace("T", " ").slice(0, 16);
+      const parts = new Intl.DateTimeFormat("ko-KR", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).formatToParts(date).reduce((acc, part) => {
+        acc[part.type] = part.value;
+        return acc;
+      }, {});
+      return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+    }
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, s => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[s]));
+
+    function toast(message) {
+      const el = document.getElementById("toast");
+      el.textContent = message;
+      el.classList.add("show");
+      setTimeout(() => el.classList.remove("show"), 2600);
+    }
+
+    function setLoginMessage(message) {
+      document.getElementById("loginMessage").textContent = message || "";
+    }
+
+    function initLoginPreferences() {
+      const rememberEmail = localStorage.getItem(PREF_KEYS.rememberEmail) === "true";
+      const autoLogin = localStorage.getItem(PREF_KEYS.autoLogin) !== "false";
+      document.getElementById("rememberEmail").checked = rememberEmail;
+      document.getElementById("autoLogin").checked = autoLogin;
+      if (rememberEmail) {
+        document.getElementById("email").value = localStorage.getItem(PREF_KEYS.savedEmail) || "";
+      }
+    }
+
+    function saveLoginPreferences(email) {
+      const rememberEmail = document.getElementById("rememberEmail").checked;
+      const autoLogin = document.getElementById("autoLogin").checked;
+      localStorage.setItem(PREF_KEYS.rememberEmail, String(rememberEmail));
+      localStorage.setItem(PREF_KEYS.autoLogin, String(autoLogin));
+      if (rememberEmail) localStorage.setItem(PREF_KEYS.savedEmail, email);
+      else localStorage.removeItem(PREF_KEYS.savedEmail);
+    }
+
+    function openSupabaseUsage() {
+      window.open(`https://supabase.com/dashboard/project/${CONFIG.PROJECT_REF}`, "_blank", "noopener,noreferrer");
+    }
+
+    async function token() {
+      const { data } = await supabaseClient.auth.getSession();
+      return data.session?.access_token || "";
+    }
+
+    async function api(payload) {
+      const res = await fetch(CONFIG.ADMIN_FUNCTION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.ok) throw new Error(body.message || "요청 실패");
+      return body;
+    }
+
+    async function login() {
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const button = document.getElementById("loginButton");
+      if (!email || !password) return setLoginMessage("이메일과 비밀번호를 입력해주세요.");
+      setLoginMessage("로그인 중입니다...");
+      button.disabled = true;
+      try {
+        const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        if (error) {
+          setLoginMessage(error.message || "로그인에 실패했습니다.");
+          return toast("로그인에 실패했습니다.");
+        }
+        saveLoginPreferences(email);
+        setLoginMessage("");
+        await showAdmin();
+      } catch (e) {
+        setLoginMessage("로그인 서버에 연결하지 못했습니다.");
+        toast("로그인 서버 연결 실패");
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function logout() {
+      await supabaseClient.auth.signOut();
+      location.reload();
+    }
+
+    async function showAdmin() {
+      document.getElementById("loginPanel").style.display = "none";
+      document.getElementById("adminApp").style.display = "";
+      await loadLicenses();
+    }
+
+    function debouncedLoad() {
+      clearTimeout(timer);
+      timer = setTimeout(loadLicenses, 300);
+    }
+
+    async function loadLicenses() {
+      try {
+        const body = await api({
+          action: "list",
+          query: document.getElementById("query").value,
+          status: document.getElementById("statusFilter").value,
+          app_id: document.getElementById("appFilter").value,
+        });
+        rows = body.rows || [];
+        renderSummary(body.summary || {});
+        renderRows();
+      } catch (e) {
+        toast(e.message);
+      }
+    }
+
+    function renderSummary(s) {
+      document.getElementById("summary").innerHTML = [
+        ["전체 라이선스", s.total || 0],
+        ["사용 전", s.unused || 0],
+        ["사용 중", s.used || 0],
+        ["사용 정지", s.blocked || 0],
+        ["고시ONE", s.gosione || 0],
+        ["인건비서", s.ingunbiseo || 0],
+      ].map(([label, value]) => `<div class="stat"><span>${label}</span><strong>${value}</strong></div>`).join("");
+      renderUsageBadge(s);
+    }
+
+    function renderUsageBadge(s) {
+      const deviceCount = rows.filter(row => row.device_id).length;
+      const recentVerified = rows.filter(row => {
+        if (!row.last_verified_at) return false;
+        const raw = String(row.last_verified_at);
+        const iso = /(?:Z|[+-]\d{2}:?\d{2})$/.test(raw) ? raw : raw + "Z";
+        const time = new Date(iso).getTime();
+        return Number.isFinite(time) && Date.now() - time < 24 * 60 * 60 * 1000;
+      }).length;
+      const total = Number(s.total || rows.length || 0);
+      const level = total < 1000 && recentVerified < 500 ? "여유" : "확인 필요";
+      document.getElementById("usageBadge").innerHTML = `Supabase 사용량 <span>${level} · 라이선스 ${total}개 · 기기 ${deviceCount}대 · 24시간 확인 ${recentVerified}회</span>`;
+      renderUsageBars([
+        { label: "라이선스 데이터", value: total, limit: 1000, unit: "개" },
+        { label: "등록 기기", value: deviceCount, limit: 1000, unit: "대" },
+        { label: "24시간 인증 확인", value: recentVerified, limit: 500, unit: "회" },
+      ]);
+    }
+
+    function renderUsageBars(items) {
+      document.getElementById("usageBars").innerHTML = items.map(item => {
+        const percent = item.limit ? Math.min(100, Math.round((item.value / item.limit) * 100)) : 0;
+        const state = percent >= 90 ? "danger" : percent >= 70 ? "warn" : "";
+        return `<div class="usage-card ${state}">
+          <div class="usage-title"><span>${item.label}</span><strong>${percent}%</strong></div>
+          <div class="usage-value">${Number(item.value || 0).toLocaleString("ko-KR")}${item.unit}</div>
+          <div class="bar"><span style="width:${percent}%"></span></div>
+          <div class="usage-limit">관리자 화면 기준 경고선: ${Number(item.limit).toLocaleString("ko-KR")}${item.unit}</div>
+        </div>`;
+      }).join("");
+    }
+
+    function renderRows() {
+      document.getElementById("tableBody").innerHTML = rows.map(row => `
+        <tr>
+          <td><strong>${esc(row.license_key)}</strong></td><td>${esc(row.app_name)}</td><td>${badge(row.status)}</td>
+          <td>${esc(row.customer_name)}</td><td>${esc(row.naver_id)}</td><td>${esc(row.customer_phone)}</td><td>${esc(row.order_number)}</td><td>${esc(row.device_id)}</td>
+          <td>${fmt(row.issued_at)}</td><td>${fmt(row.activated_at)}</td><td>${fmt(row.last_verified_at)}</td><td>${fmt(row.reset_at)}</td>
+          <td>${esc(row.memo)}</td><td>${actions(row)}</td>
+        </tr>`).join("");
+      document.getElementById("cardList").innerHTML = rows.map(row => `
+        <div class="license-card">
+          <div class="license-card-head">
+            <div class="license-card-title">
+              <div class="license-key">${esc(row.license_key)}</div>
+              <div class="license-card-app">${esc(row.app_name || "-")}</div>
+            </div>
+            ${badge(row.status)}
+          </div>
+          <div class="license-meta">
+            <strong>고객명</strong><span>${esc(row.customer_name || "-")}</span>
+            <strong>네이버ID</strong><span>${esc(row.naver_id || "-")}</span>
+            <strong>연락처</strong><span>${esc(row.customer_phone || "-")}</span>
+            <strong>주문번호</strong><span>${esc(row.order_number || "-")}</span>
+            <strong>기기</strong><span>${esc(row.device_id || "-")}</span>
+            <strong>발급일</strong><span>${fmt(row.issued_at) || "-"}</span>
+            <strong>활성</strong><span>${fmt(row.activated_at) || "-"}</span>
+            <strong>확인</strong><span>${fmt(row.last_verified_at) || "-"}</span>
+            <strong>해제일</strong><span>${fmt(row.reset_at) || "-"}</span>
+            <strong>메모</strong><span>${esc(row.memo || "-")}</span>
+          </div>
+          ${actions(row)}
+        </div>`).join("");
+    }
+
+    function badge(status) {
+      return `<span class="badge ${status}">${statusLabel[status] || status}</span>`;
+    }
+
+    function actions(row) {
+      return `<div class="actions">
+        <button class="btn primary" onclick="copyLicenseMessage('${row.license_key}')">판매문구</button>
+        <button class="btn" onclick="resetDevice('${row.id}')">기기해제</button>
+        <button class="btn" onclick="editCustomer('${row.id}')">고객수정</button>
+        <button class="btn" onclick="editMemo('${row.id}')">메모수정</button>
+        <button class="btn danger" onclick="deleteLicense('${row.id}')">삭제</button>
+      </div>`;
+    }
+
+    async function createLicenses() {
+      const [app_id, app_name] = document.getElementById("createApp").value.split("|");
+      try {
+        const body = await api({
+          action: "create",
+          app_id, app_name,
+          quantity: Number(document.getElementById("quantity").value || 1),
+          customer_name: document.getElementById("customerName").value,
+          naver_id: document.getElementById("naverId").value,
+          customer_phone: document.getElementById("customerPhone").value,
+          order_number: document.getElementById("orderNumber").value,
+          memo: document.getElementById("memo").value,
+        });
+        createdKeys = (body.rows || []).map(r => r.license_key);
+        toast("라이선스를 생성했습니다.");
+        await loadLicenses();
+      } catch (e) {
+        toast(e.message);
+      }
+    }
+
+    function copyCreatedKeys() {
+      if (!createdKeys.length) return toast("복사할 생성 키가 없습니다.");
+      copyText(createdKeys.map(key => licenseMessage(key)).join("\n\n---\n\n"));
+    }
+
+    function licenseMessage(key) {
+      return [
+        "[고시ONE]",
+        "구매해주셔서 감사합니다.",
+        "",
+        `라이선스키: ${key}`,
+        "",
+        "고시ONE 앱 실행 후 라이선스 인증 화면에 위 키를 입력하시면 사용하실 수 있습니다.",
+        "라이선스키는 재설치나 기기 변경 시 필요할 수 있으니 꼭 보관해주세요.",
+        "",
+        "감사합니다."
+      ].join("\n");
+    }
+
+    function copyLicenseMessage(key) {
+      copyText(licenseMessage(key));
+    }
+
+    function copyText(text) {
+      navigator.clipboard?.writeText(text).then(() => toast("복사했습니다."));
+    }
+
+    async function resetDevice(id) {
+      if (!confirm("기기등록을 해제할까요?")) return;
+      await runAction({ action: "reset_device", id });
+    }
+
+    async function deleteLicense(id) {
+      if (!confirm("이 라이선스를 완전히 삭제할까요?\n삭제한 라이선스키는 다시 인증할 수 없습니다.")) return;
+      await runAction({ action: "delete", id });
+    }
+
+    async function editCustomer(id) {
+      const row = rows.find(r => r.id === id);
+      if (!row) return;
+      const customer_name = prompt("고객명", row.customer_name || "");
+      if (customer_name === null) return;
+      const naver_id = prompt("네이버 아이디", row.naver_id || "");
+      if (naver_id === null) return;
+      const customer_phone = prompt("연락처", row.customer_phone || "");
+      if (customer_phone === null) return;
+      const order_number = prompt("주문번호", row.order_number || "");
+      if (order_number === null) return;
+      await runAction({ action: "update", id, customer_name, naver_id, customer_phone, order_number, memo: row.memo });
+    }
+
+    async function editMemo(id) {
+      const row = rows.find(r => r.id === id);
+      if (!row) return;
+      const memo = prompt("메모", row.memo || "");
+      if (memo === null) return;
+      await runAction({ action: "update", id, customer_name: row.customer_name, naver_id: row.naver_id, customer_phone: row.customer_phone, order_number: row.order_number, memo });
+    }
+
+    async function runAction(payload) {
+      try {
+        await api(payload);
+        toast("처리되었습니다.");
+        await loadLicenses();
+      } catch (e) {
+        toast(e.message);
+      }
+    }
+
+    initLoginPreferences();
+    supabaseClient.auth.getSession().then(async ({ data }) => {
+      if (!data.session) return;
+      if (localStorage.getItem(PREF_KEYS.autoLogin) === "false") {
+        await supabaseClient.auth.signOut();
+        return;
+      }
+      showAdmin();
+    });
+  </script>
+</body>
+</html>
