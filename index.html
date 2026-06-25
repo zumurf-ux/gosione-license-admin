@@ -82,13 +82,23 @@
     th:nth-child(11),td:nth-child(11),
     th:nth-child(12),td:nth-child(12),
     th:nth-child(13),td:nth-child(13) { width:130px; text-align:left; }
-    th:nth-child(14),td:nth-child(14) { width:450px; text-align:left; overflow:visible; }
+    th:nth-child(14),td:nth-child(14) { width:540px; text-align:left; overflow:visible; }
     .badge { display:inline-flex; min-height:24px; align-items:center; justify-content:center; border-radius:999px; padding:0 9px; font-size:12px; font-weight:800; line-height:1; vertical-align:middle; }
     .badge.unused { background:#e5e7eb; color:#374151; }
     .badge.used { background:#dcfce7; color:#15803d; }
     .badge.blocked { background:#fee2e2; color:#b91c1c; }
-    .actions { display:grid; grid-template-columns:repeat(5,max-content); align-items:center; gap:6px; min-width:0; }
+    .actions { display:grid; grid-template-columns:repeat(6,max-content); align-items:center; gap:6px; min-width:0; }
     .actions .btn { min-height:32px; padding:0 9px; font-size:12px; border-radius:8px; white-space:nowrap; line-height:1; }
+    .certificate-backdrop { position:fixed; inset:0; z-index:20; display:none; align-items:center; justify-content:center; padding:18px; background:rgba(15,23,42,.54); }
+    .certificate-backdrop.show { display:flex; }
+    .certificate-modal { width:min(760px,100%); max-height:calc(100vh - 36px); overflow:auto; background:#fff; border-radius:16px; box-shadow:0 24px 70px rgba(15,23,42,.3); }
+    .certificate-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 18px; border-bottom:1px solid var(--line); }
+    .certificate-head h2 { margin:0; font-size:19px; }
+    .certificate-close { width:40px; min-height:40px; padding:0; border-radius:999px; font-size:22px; color:var(--muted); background:#f1f5f9; }
+    .certificate-body { display:grid; gap:12px; padding:16px 18px 18px; }
+    .certificate-preview { width:100%; border:0; border-radius:0; background:transparent; padding:0; }
+    .certificate-preview canvas { display:block; width:100%; height:auto; border-radius:0; box-shadow:none; background:transparent; }
+    .certificate-actions { display:flex; gap:8px; justify-content:flex-end; }
     .cards { display:none; gap:10px; }
     .license-card { border:1px solid var(--line); border-radius:12px; background:#fff; overflow:hidden; }
     .license-card summary { list-style:none; cursor:pointer; }
@@ -147,6 +157,7 @@
       .actions .btn { min-height:40px; font-size:13px; }
       .actions .btn.primary,
       .actions .btn.danger { grid-column:1/-1; }
+      .certificate-actions { display:grid; grid-template-columns:1fr; }
     }
     @media (max-width:420px) {
       .wrap { padding:10px; }
@@ -244,6 +255,23 @@
     </main>
   </div>
   <div class="toast" id="toast"></div>
+  <div class="certificate-backdrop" id="certificateModal" onclick="if(event.target === this) closeCertificate()">
+    <section class="certificate-modal" role="dialog" aria-modal="true" aria-labelledby="certificateTitle">
+      <div class="certificate-head">
+        <h2 id="certificateTitle">라이선스 증서 발급</h2>
+        <button class="certificate-close" type="button" onclick="closeCertificate()" aria-label="닫기">×</button>
+      </div>
+      <div class="certificate-body">
+        <div class="certificate-preview">
+          <canvas id="certificateCanvas" width="1452" height="1027"></canvas>
+        </div>
+        <div class="certificate-actions">
+          <button class="btn" type="button" onclick="closeCertificate()">닫기</button>
+          <button class="btn primary" type="button" onclick="downloadCertificate()">JPG 저장</button>
+        </div>
+      </div>
+    </section>
+  </div>
 
   <script>
     const CONFIG = {
@@ -257,7 +285,10 @@
     let createdKeys = [];
     let timer = null;
     let sortState = { key: "", direction: "" };
-    const PREF_KEYS = {
+    let currentCertificateRow = null;
+    const certificateSvgBase64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iTGF5ZXJfMSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2ZXJzaW9uPSIxLjEiIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB2aWV3Qm94PSIwIDAgMTkyMCAxMzU3LjY2Ij4KICA8IS0tIEdlbmVyYXRvcjogQWRvYmUgSWxsdXN0cmF0b3IgMjkuMC4wLCBTVkcgRXhwb3J0IFBsdWctSW4gLiBTVkcgVmVyc2lvbjogMi4xLjAgQnVpbGQgMTg2KSAgLS0+CiAgPGRlZnM+CiAgICA8c3R5bGU+CiAgICAgIC5zdDAgewogICAgICAgIGZvbnQtc2l6ZTogMzQuMDZweDsKICAgICAgfQoKICAgICAgLnN0MCwgLnN0MSwgLnN0MiwgLnN0MywgLnN0NCwgLnN0NSwgLnN0NiwgLnN0NywgLnN0OCwgLnN0OSwgLnN0MTAsIC5zdDExLCAuc3QxMiB7CiAgICAgICAgaXNvbGF0aW9uOiBpc29sYXRlOwogICAgICB9CgogICAgICAuc3QwLCAuc3Q0LCAuc3Q1LCAuc3Q2LCAuc3Q4LCAuc3Q5LCAuc3QxMSB7CiAgICAgICAgZm9udC13ZWlnaHQ6IDcwMDsKICAgICAgfQoKICAgICAgLnN0MCwgLnN0NCwgLnN0NSwgLnN0OSB7CiAgICAgICAgZm9udC1mYW1pbHk6IFByZXRlbmRhcmQtRXh0cmFCb2xkLUtTQ3BjLUVVQy1ILCBQcmV0ZW5kYXJkOwogICAgICB9CgogICAgICAuc3QwLCAuc3Q5LCAuc3QxMyB7CiAgICAgICAgZmlsbDogIzBhNjZmZjsKICAgICAgfQoKICAgICAgLnN0MSB7CiAgICAgICAgZm9udC1mYW1pbHk6IFByZXRlbmRhcmQtTWVkaXVtLUtTQ3BjLUVVQy1ILCBQcmV0ZW5kYXJkOwogICAgICAgIGZvbnQtc2l6ZTogMjQuNzdweDsKICAgICAgICBmb250LXdlaWdodDogNTAwOwogICAgICB9CgogICAgICAuc3QxLCAuc3Q2LCAuc3Q4IHsKICAgICAgICBmaWxsOiAjNjM3MDgzOwogICAgICB9CgogICAgICAuc3QyIHsKICAgICAgICBmb250LWZhbWlseTogUHJldGVuZGFyZC1CbGFjay1LU0NwYy1FVUMtSCwgUHJldGVuZGFyZDsKICAgICAgICBmb250LXNpemU6IDgxLjI3cHg7CiAgICAgICAgZm9udC13ZWlnaHQ6IDgwMDsKICAgICAgICBsZXR0ZXItc3BhY2luZzogLS4wNGVtOwogICAgICB9CgogICAgICAuc3QyLCAuc3Q0LCAuc3Q1LCAuc3QxMSB7CiAgICAgICAgZmlsbDogIzEwMTgyNzsKICAgICAgfQoKICAgICAgLnN0MTQgewogICAgICAgIGZpbGw6ICNlZGY0ZmY7CiAgICAgIH0KCiAgICAgIC5zdDE1LCAuc3QxNiB7CiAgICAgICAgZmlsbDogI2ZmZjsKICAgICAgfQoKICAgICAgLnN0MTcgewogICAgICAgIGZpbGw6IHVybCgjbGluZWFyLWdyYWRpZW50MSk7CiAgICAgIH0KCiAgICAgIC5zdDE4LCAuc3Q3LCAuc3QxOSwgLnN0MjAsIC5zdDIxLCAuc3QyMiwgLnN0MjMgewogICAgICAgIGZpbGw6IG5vbmU7CiAgICAgIH0KCiAgICAgIC5zdDI0IHsKICAgICAgICBmaWxsOiAjZTBlOWY1OwogICAgICB9CgogICAgICAuc3QzIHsKICAgICAgICBmaWxsOiB1cmwoI2dyaWQpOwogICAgICAgIG9wYWNpdHk6IC4yODsKICAgICAgfQoKICAgICAgLnN0NCB7CiAgICAgICAgZm9udC1zaXplOiAzNi4yNXB4OwogICAgICB9CgogICAgICAuc3Q1IHsKICAgICAgICBmb250LXNpemU6IDM2LjI1cHg7CiAgICAgIH0KCiAgICAgIC5zdDYgewogICAgICAgIGZvbnQtc2l6ZTogMjguMzJweDsKICAgICAgfQoKICAgICAgLnN0NiwgLnN0OCB7CiAgICAgICAgZm9udC1mYW1pbHk6IFByZXRlbmRhcmQtQm9sZC1LU0NwYy1FVUMtSCwgUHJldGVuZGFyZDsKICAgICAgfQoKICAgICAgLnN0NyB7CiAgICAgICAgb3BhY2l0eTogLjQ1OwogICAgICAgIHN0cm9rZTogI2U4ZWVmNzsKICAgICAgICBzdHJva2Utd2lkdGg6IDJweDsKICAgICAgfQoKICAgICAgLnN0OCB7CiAgICAgICAgZm9udC1zaXplOiAyOC4zMnB4OwogICAgICB9CgogICAgICAuc3Q5IHsKICAgICAgICBmb250LXNpemU6IDIyLjQ1cHg7CiAgICAgIH0KCiAgICAgIC5zdDEwIHsKICAgICAgICBmb250LWZhbWlseTogUHJldGVuZGFyZC1TZW1pQm9sZC1LU0NwYy1FVUMtSCwgUHJldGVuZGFyZDsKICAgICAgICBmb250LXNpemU6IDE3LjAzcHg7CiAgICAgICAgZm9udC13ZWlnaHQ6IDYwMDsKICAgICAgfQoKICAgICAgLnN0MTAsIC5zdDEyIHsKICAgICAgICBmaWxsOiAjOGE5NmE4OwogICAgICB9CgogICAgICAuc3QxOSB7CiAgICAgICAgc3Ryb2tlOiAjZGRlNmYxOwogICAgICB9CgogICAgICAuc3QxOSwgLnN0MjAsIC5zdDIxLCAuc3QyMiB7CiAgICAgICAgc3Ryb2tlLXdpZHRoOiAxLjU1cHg7CiAgICAgIH0KCiAgICAgIC5zdDIwIHsKICAgICAgICBzdHJva2U6ICNkNGUxZjI7CiAgICAgIH0KCiAgICAgIC5zdDIxIHsKICAgICAgICBzdHJva2U6ICNjOWRhZjI7CiAgICAgIH0KCiAgICAgIC5zdDExIHsKICAgICAgICBmb250LWZhbWlseTogUm9ib3RvLUV4dHJhQm9sZCwgUm9ib3RvOwogICAgICAgIGZvbnQtc2l6ZTogOTUuNzNweDsKICAgICAgICBsZXR0ZXItc3BhY2luZzogLjA5ZW07CiAgICAgIH0KCiAgICAgIC5zdDEyIHsKICAgICAgICBmb250LWZhbWlseTogQ29uc29sYXMsIENvbnNvbGFzOwogICAgICAgIGZvbnQtc2l6ZTogMTMuMTZweDsKICAgICAgICBsZXR0ZXItc3BhY2luZzogLjI5ZW07CiAgICAgIH0KCiAgICAgIC5zdDE2IHsKICAgICAgICBmaWxsLW9wYWNpdHk6IC44MjsKICAgICAgfQoKICAgICAgLnN0MjUgewogICAgICAgIGZpbGw6IHVybCgjbGluZWFyLWdyYWRpZW50KTsKICAgICAgfQoKICAgICAgLnN0MjIgewogICAgICAgIHN0cm9rZTogI2UwZThmNDsKICAgICAgfQoKICAgICAgLnN0MjMgewogICAgICAgIHN0cm9rZTogI2Q2ZTJmMzsKICAgICAgICBzdHJva2Utd2lkdGg6IDEuOTRweDsKICAgICAgfQogICAgPC9zdHlsZT4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0ibGluZWFyLWdyYWRpZW50IiB4MT0iMCIgeTE9IjEzNTkuMTYiIHgyPSIxOTIwIiB5Mj0iMS41IiBncmFkaWVudFRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMTM1OS42Nikgc2NhbGUoMSAtMSkiIGdyYWRpZW50VW5pdHM9InVzZXJTcGFjZU9uVXNlIj4KICAgICAgPHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZjhmYmZmIi8+CiAgICAgIDxzdG9wIG9mZnNldD0iMSIgc3RvcC1jb2xvcj0iI2ZmZiIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICAgIDxwYXR0ZXJuIGlkPSJncmlkIiB4PSIwIiB5PSIwIiB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgcGF0dGVyblRyYW5zZm9ybT0idHJhbnNsYXRlKC0xMDEgLTEzNDUyLjE3KSBzY2FsZSgxIC0xKSIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSIgdmlld0JveD0iMCAwIDEyMCAxMjAiPgogICAgICA8Zz4KICAgICAgICA8cmVjdCBjbGFzcz0ic3QxOCIgd2lkdGg9IjEyMCIgaGVpZ2h0PSIxMjAiLz4KICAgICAgICA8cGF0aCBjbGFzcz0ic3Q3IiBkPSJNMTIwLDEyMEgwVjAiLz4KICAgICAgPC9nPgogICAgPC9wYXR0ZXJuPgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJsaW5lYXItZ3JhZGllbnQxIiB4MT0iLTM4LjMxIiB5MT0iMjIzOC40OCIgeDI9IjEyNzcuNTUiIHkyPSIxOTI4Ljg2IiBncmFkaWVudFRyYW5zZm9ybT0idHJhbnNsYXRlKDcwMCAyODU5LjY2KSBzY2FsZSgxIC0xKSIgZ3JhZGllbnRVbml0cz0idXNlclNwYWNlT25Vc2UiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmN2ZhZmYiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZmZmIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cmVjdCBjbGFzcz0ic3QxNCIgeD0iMCIgeT0iLjUiIHdpZHRoPSIxOTIwIiBoZWlnaHQ9IjEzNTcuNjYiLz4KICA8cmVjdCBjbGFzcz0ic3QyNSIgeD0iNjkuNjYiIHk9IjYyLjQyIiB3aWR0aD0iMTc4MC42NyIgaGVpZ2h0PSIxMjMzLjgyIiByeD0iNTQuMTgiIHJ5PSI1NC4xOCIvPgogIDxyZWN0IGNsYXNzPSJzdDIzIiB4PSI2OS42NiIgeT0iNjIuNDIiIHdpZHRoPSIxNzgwLjY3IiBoZWlnaHQ9IjEyMzMuODIiIHJ4PSI1NC4xOCIgcnk9IjU0LjE4Ii8+CiAgPHJlY3QgY2xhc3M9InN0MyIgeD0iMTAwLjYyIiB5PSI5My4zOCIgd2lkdGg9IjE3MTguNzUiIGhlaWdodD0iMTE3MS44OSIgcng9IjQwLjI1IiByeT0iNDAuMjUiLz4KICA8cmVjdCBjbGFzcz0ic3QxNiIgeD0iMjAyLjY5IiB5PSIxNzguMDMiIHdpZHRoPSIxNTE3LjExIiBoZWlnaHQ9IjEwMDEuNiIgcng9IjMzLjI4IiByeT0iMzMuMjgiLz4KICA8cmVjdCBjbGFzcz0ic3QyMSIgeD0iMjAxLjI1IiB5PSIxNzguNTMiIHdpZHRoPSIxNTE3LjExIiBoZWlnaHQ9IjEwMDEuNiIgcng9IjMzLjI4IiByeT0iMzMuMjgiLz4KICA8dGV4dCBjbGFzcz0ic3QwIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgyNzAuOTEgMjg2LjkpIj48dHNwYW4geD0iMCIgeT0iMCI+7J246rG067mE7IScPC90c3Bhbj48L3RleHQ+CiAgPHRleHQgY2xhc3M9InN0MiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMjcwLjkxIDM5NS4yNikiPjx0c3BhbiB4PSIwIiB5PSIwIj7rnbzsnbTshKDsiqQg7KCV7ZKIIOyduOymneyEnDwvdHNwYW4+PC90ZXh0PgogIDxwYXRoIGNsYXNzPSJzdDEzIiBkPSJNMjc0LjQsNDM3LjgzaDQ1LjY3YzEuMDcsMCwxLjk0Ljg3LDEuOTQsMS45NGgwYzAsMS4wNy0uODcsMS45NC0xLjk0LDEuOTRoLTQ1LjY3Yy0xLjA3LDAtMS45NC0uODctMS45NC0xLjk0aDBjMC0xLjA3Ljg3LTEuOTQsMS45NC0xLjk0WiIvPgogIDx0ZXh0IGNsYXNzPSJzdDEiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDI3MC45MSA0OTAuMDgpIj48dHNwYW4geD0iMCIgeT0iMCI+67O4IOymneyEnOuKlCDqs7Xsi50g6rWs66ekIOudvOydtOyEoOyKpOyehOydhCDsnbjspp3tlanri4jri6QuPC90c3Bhbj48L3RleHQ+CiAgPHJlY3QgY2xhc3M9InN0MTciIHg9IjI3MC45MSIgeT0iNTgxLjAzIiB3aWR0aD0iMTM3Ny43OSIgaGVpZ2h0PSIyMjAuNiIgcng9IjIxLjY3IiByeT0iMjEuNjciLz4KICA8cmVjdCBjbGFzcz0ic3QyMCIgeD0iMjcwLjkxIiB5PSI1ODEuMDMiIHdpZHRoPSIxMzc3Ljc5IiBoZWlnaHQ9IjIyMC42IiByeD0iMjEuNjciIHJ5PSIyMS42NyIvPgogIDx0ZXh0IGNsYXNzPSJzdDkiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDMxNy4zNSA2MzkuMDgpIj48dHNwYW4geD0iMCIgeT0iMCI+65287J207ISg7Iqk7YKkPC90c3Bhbj48L3RleHQ+CiAgPHRleHQgY2xhc3M9InN0MTEiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDMzMy4xNiA3MzYuNzMpIj48dHNwYW4geD0iMCIgeT0iMCI+UFZEQy1WQ1k0LTVKOEQtVTlXOTwvdHNwYW4+PC90ZXh0PgogIDxyZWN0IGNsYXNzPSJzdDI0IiB4PSIzMTguOCIgeT0iNzU0LjY3IiB3aWR0aD0iMTI4NC45IiBoZWlnaHQ9IjEuMTYiLz4KICA8cmVjdCBjbGFzcz0ic3QxNSIgeD0iMjY5LjkxIiB5PSI4NjMuMjEiIHdpZHRoPSIxMzc3Ljc5IiBoZWlnaHQ9IjIwMS4yNSIgcng9IjE4LjU4IiByeT0iMTguNTgiLz4KICA8cmVjdCBjbGFzcz0ic3QyMiIgeD0iMjcwLjkxIiB5PSI4NjMuNTUiIHdpZHRoPSIxMzc3Ljc5IiBoZWlnaHQ9IjIwMS4yNSIgcng9IjE4LjU4IiByeT0iMTguNTgiLz4KICA8bGluZSBjbGFzcz0ic3QxOSIgeDE9IjYxMy42MiIgeTE9Ijg5NS4yOSIgeDI9IjYxMy42MiIgeTI9IjEwMzMuMDciLz4KICA8bGluZSBjbGFzcz0ic3QxOSIgeDE9Ijk2MCIgeTE9Ijg5NS4yOSIgeDI9Ijk2MCIgeTI9IjEwMzMuMDciLz4KICA8bGluZSBjbGFzcz0ic3QxOSIgeDE9IjEzMDYuMzgiIHkxPSI4OTUuMjkiIHgyPSIxMzA2LjM4IiB5Mj0iMTAzMy4wNyIvPgogIDxnPgogICAgPHRleHQgY2xhc3M9InN0OCIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMzkxLjMyIDkzOS45NikiPjx0c3BhbiB4PSIwIiB5PSIwIj7rsJzquInrgqDsp5w8L3RzcGFuPjwvdGV4dD4KICAgIDx0ZXh0IGNsYXNzPSJzdDQiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDMzNiA5ODguMSkiPjx0c3BhbiB4PSIwIiB5PSIwIj4yMDI2LiA2LiAyNS48L3RzcGFuPjwvdGV4dD4KICA8L2c+CiAgPGc+CiAgICA8dGV4dCBjbGFzcz0ic3Q2IiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMDgwLjUzIDkzOS45NikiPjx0c3BhbiB4PSIwIiB5PSIwIj7sgqzsmqkg6riw7KSAPC90c3Bhbj48L3RleHQ+CiAgICA8dGV4dCBjbGFzcz0ic3Q1IiB0cmFuc2Zvcm09InRyYW5zbGF0ZSgxMDE3LjggOTg4LjEpIj48dHNwYW4geD0iMCIgeT0iMCI+MeudvOydtOyEoOyKpCAx6riw6riwPC90c3Bhbj48L3RleHQ+CiAgPC9nPgogIDxnPgogICAgPHRleHQgY2xhc3M9InN0NiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTQyNy40MiA5MzkuOTYpIj48dHNwYW4geD0iMCIgeT0iMCI+7KCV7ZKIIOyduOymnTwvdHNwYW4+PC90ZXh0PgogICAgPHRleHQgY2xhc3M9InN0NSIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTQxMi44NiA5ODguMSkiPjx0c3BhbiB4PSIwIiB5PSIwIj7snbjspp0g7JmE66OMPC90c3Bhbj48L3RleHQ+CiAgPC9nPgogIDxnPgogICAgPHRleHQgY2xhc3M9InN0MTAiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDI3MC45MSAxMTA3LjM3KSI+PHRzcGFuIHg9IjAiIHk9IjAiPsKpIDIwMjYg65SU7J6Q7J247ZWY64qU7IK87LSMPC90c3Bhbj48L3RleHQ+CiAgICA8dGV4dCBjbGFzcz0ic3QxMiIgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoMTIyNi43MSAxMTA3LjM3KSI+PHRzcGFuIHg9IjAiIHk9IjAiPkxJQ0VOU0UgQ0VSVElGSUNBVEUgwrcgVkVSSUZJRUQgUFJPRFVDVDwvdHNwYW4+PC90ZXh0PgogIDwvZz4KICA8Zz4KICAgIDx0ZXh0IGNsYXNzPSJzdDYiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDc1MC43OCA5MzkuOTYpIj48dHNwYW4geD0iMCIgeT0iMCI+6rOg6rCd66qFPC90c3Bhbj48L3RleHQ+CiAgICA8dGV4dCBjbGFzcz0ic3Q1IiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg3MzkuNjIgOTg4LjExKSI+PHRzcGFuIHg9IjAiIHk9IjAiPuyrhOyasOuPmTwvdHNwYW4+PC90ZXh0PgogIDwvZz4KPC9zdmc+";
+    const certificateSvgTemplate = decodeBase64Utf8(certificateSvgBase64);
+const PREF_KEYS = {
       rememberEmail: "gosione_admin_remember_email",
       savedEmail: "gosione_admin_saved_email",
       autoLogin: "gosione_admin_auto_login",
@@ -548,6 +579,7 @@
     function actions(row) {
       return `<div class="actions">
         <button class="btn primary" onclick="copyLicenseMessage('${row.id}')">판매문구</button>
+        <button class="btn green" onclick="openCertificate('${row.id}')">증서 발급</button>
         <button class="btn" onclick="resetDevice('${row.id}')">기기해제</button>
         <button class="btn" onclick="editCustomer('${row.id}')">고객수정</button>
         <button class="btn" onclick="editMemo('${row.id}')">메모수정</button>
@@ -613,6 +645,114 @@
       copyText(licenseMessage(row));
     }
 
+    function openCertificate(id) {
+      const row = rows.find(item => item.id === id);
+      if (!row) return toast("라이선스 정보를 찾을 수 없습니다.");
+      currentCertificateRow = row;
+      document.getElementById("certificateModal").classList.add("show");
+      drawLicenseCertificate(document.getElementById("certificateCanvas"), row);
+    }
+
+    function closeCertificate() {
+      document.getElementById("certificateModal").classList.remove("show");
+    }
+
+    function certificateDate(row) {
+      const value = row?.issued_at || new Date().toISOString();
+      const date = new Date(String(value).endsWith("Z") ? value : String(value) + "Z");
+      if (Number.isNaN(date.getTime())) return new Date().toLocaleDateString("ko-KR");
+      return date.toLocaleDateString("ko-KR", { year:"numeric", month:"2-digit", day:"2-digit" });
+    }
+
+    function decodeBase64Utf8(base64) {
+      const binary = atob(base64);
+      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      return new TextDecoder("utf-8").decode(bytes);
+    }
+
+    function drawLicenseCertificate(canvas, row) {
+      const ctx = canvas.getContext("2d");
+      const appName = licenseAppName(row);
+      const key = row.license_key || "";
+      const issued = certificateDate(row);
+      const customer = row.customer_name || "구매 고객";
+      const svgText = buildCertificateSvg({ appName, key, issued, customer });
+      const image = new Image();
+      image.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      };
+      image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText);
+    }
+
+    function buildCertificateSvg(data) {
+      const replacements = [
+        ["인건비서", data.appName],
+        ["PVDC-VCY4-5J8D-U9W9", data.key],
+        ["2026. 6. 25.", data.issued],
+        ["쫄우동", data.customer],
+        ["공식 구매 라이선스임", "정식 구매 라이선스임"]
+      ];
+      let svg = certificateSvgTemplate;
+      svg = addCertificateWatermark(svg);
+      replacements.forEach(([from, to]) => {
+        svg = svg.split(from).join(escapeSvgText(to || ""));
+      });
+      svg = svg
+        .replace('viewBox="0 0 1366 768"', 'viewBox="319.37 127 726.31 513.58"')
+        .replace("<svg ", '<svg width="726.31" height="513.58" preserveAspectRatio="xMidYMid meet" ');
+      return svg;
+    }
+
+    function addCertificateWatermark(svg) {
+      const watermark = `
+  <defs>
+    <pattern id="certificateWatermarkPattern" x="0" y="0" width="1120" height="82" patternUnits="userSpaceOnUse" patternTransform="rotate(-28 682 384)">
+      <text x="-40" y="50" fill="#0b66d8" opacity="0.032" font-family="'Segoe UI','Noto Sans KR',sans-serif" font-size="25" font-weight="900">디자인하는삼촌 · 디자인하는삼촌 · 디자인하는삼촌 · 디자인하는삼촌 · 디자인하는삼촌 · 디자인하는삼촌 · 디자인하는삼촌</text>
+    </pattern>
+  </defs>
+  <rect x="-1200" y="-1200" width="4000" height="3600" fill="url(#certificateWatermarkPattern)" pointer-events="none"/>`;
+      const closeSvg = svg.lastIndexOf("</svg>");
+      if (closeSvg < 0) return svg + watermark;
+      return svg.slice(0, closeSvg) + watermark + "\n" + svg.slice(closeSvg);
+    }
+
+    function escapeSvgText(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+    function roundRect(ctx, x, y, w, h, r, fill, stroke, lineWidth) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+      if (fill) {
+        ctx.fillStyle = fill;
+        ctx.fill();
+      }
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = lineWidth || 1;
+        ctx.stroke();
+      }
+    }
+
+    function downloadCertificate() {
+      if (!currentCertificateRow) return toast("증서 정보를 찾을 수 없습니다.");
+      const canvas = document.getElementById("certificateCanvas");
+      drawLicenseCertificate(canvas, currentCertificateRow);
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/jpeg", .94);
+      link.download = `${licenseAppName(currentCertificateRow)}_라이선스증서_${currentCertificateRow.license_key || "license"}.jpg`;
+      link.click();
+      toast("증서 JPG를 저장했습니다.");
+    }
+
     function copyText(text) {
       navigator.clipboard?.writeText(text).then(() => toast("복사했습니다."));
     }
@@ -671,3 +811,8 @@
   </script>
 </body>
 </html>
+
+
+
+
+
