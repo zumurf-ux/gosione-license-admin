@@ -87,7 +87,7 @@
     .badge.unused { background:#e5e7eb; color:#374151; }
     .badge.used { background:#dcfce7; color:#15803d; }
     .badge.blocked { background:#fee2e2; color:#b91c1c; }
-    .actions { display:grid; grid-template-columns:repeat(6,max-content); align-items:center; gap:6px; min-width:0; }
+    .actions { display:grid; grid-template-columns:repeat(7,max-content); align-items:center; gap:6px; min-width:0; }
     .actions .btn { min-height:32px; padding:0 9px; font-size:12px; border-radius:8px; white-space:nowrap; line-height:1; }
     .certificate-backdrop { position:fixed; inset:0; z-index:20; display:none; align-items:center; justify-content:center; padding:18px; background:rgba(15,23,42,.54); }
     .certificate-backdrop.show { display:flex; }
@@ -582,6 +582,7 @@ const PREF_KEYS = {
       return `<div class="actions">
         <button class="btn primary" onclick="copyLicenseMessage('${row.id}')">판매문구</button>
         <button class="btn green" onclick="openCertificate('${row.id}')">증서 발급</button>
+        <button class="btn" onclick="manualVerifyLicense('${row.id}')">확인</button>
         <button class="btn" onclick="resetDevice('${row.id}')">기기해제</button>
         <button class="btn" onclick="editCustomer('${row.id}')">고객수정</button>
         <button class="btn" onclick="editMemo('${row.id}')">메모수정</button>
@@ -791,6 +792,23 @@ const PREF_KEYS = {
 
     function copyText(text) {
       navigator.clipboard?.writeText(text).then(() => toast("복사했습니다."));
+    }
+
+    async function manualVerifyLicense(id) {
+      const row = rows.find(r => r.id === id);
+      if (!row) return toast("라이선스 정보를 찾을 수 없습니다.");
+      try {
+        await api({ action: "manual_verify", id });
+      } catch (edgeError) {
+        const now = new Date().toISOString();
+        const { error } = await supabaseClient
+          .from("licenses")
+          .update({ last_verified_at: now })
+          .eq("id", id);
+        if (error) throw new Error(edgeError.message || error.message || "확인 처리 실패");
+      }
+      toast("확인 시간을 갱신했습니다.");
+      await loadLicenses();
     }
 
     async function resetDevice(id) {
