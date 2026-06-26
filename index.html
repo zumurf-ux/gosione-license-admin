@@ -580,13 +580,13 @@ const PREF_KEYS = {
 
     function actions(row) {
       return `<div class="actions">
-        <button class="btn primary" onclick="copyLicenseMessage('${row.id}')">판매문구</button>
-        <button class="btn green" onclick="openCertificate('${row.id}')">증서 발급</button>
-        <button class="btn" onclick="manualVerifyLicense('${row.id}')">확인</button>
-        <button class="btn" onclick="resetDevice('${row.id}')">기기해제</button>
-        <button class="btn" onclick="editCustomer('${row.id}')">고객수정</button>
-        <button class="btn" onclick="editMemo('${row.id}')">메모수정</button>
-        <button class="btn danger" onclick="deleteLicense('${row.id}')">삭제</button>
+        <button class="btn primary" type="button" onclick="copyLicenseMessage('${row.id}')">판매문구</button>
+        <button class="btn green" type="button" onclick="openCertificate('${row.id}')">증서 발급</button>
+        <button class="btn" type="button" onclick="manualVerifyLicense('${row.id}')">확인</button>
+        <button class="btn" type="button" onclick="resetDevice('${row.id}')">기기해제</button>
+        <button class="btn" type="button" onclick="editCustomer('${row.id}')">고객수정</button>
+        <button class="btn" type="button" onclick="editMemo('${row.id}')">메모수정</button>
+        <button class="btn danger" type="button" onclick="deleteLicense('${row.id}')">삭제</button>
       </div>`;
     }
 
@@ -797,18 +797,49 @@ const PREF_KEYS = {
     async function manualVerifyLicense(id) {
       const row = rows.find(r => r.id === id);
       if (!row) return toast("라이선스 정보를 찾을 수 없습니다.");
+      const now = new Date().toISOString();
+      let lastError = null;
+      toast("확인 처리 중입니다.");
       try {
-        await api({ action: "manual_verify", id });
+        await api({ action: "manual_verify", id, last_verified_at: now });
       } catch (edgeError) {
-        const now = new Date().toISOString();
-        const { error } = await supabaseClient
-          .from("licenses")
-          .update({ last_verified_at: now })
-          .eq("id", id);
-        if (error) throw new Error(edgeError.message || error.message || "확인 처리 실패");
+        lastError = edgeError;
+        try {
+          const { error } = await supabaseClient
+            .from("licenses")
+            .update({ last_verified_at: now })
+            .eq("id", id);
+          if (error) throw error;
+        } catch (directError) {
+          lastError = directError || lastError;
+          try {
+            await api({
+              action: "update",
+              id,
+              customer_name: row.customer_name,
+              naver_id: row.naver_id,
+              customer_phone: row.customer_phone,
+              order_number: row.order_number,
+              memo: row.memo,
+              last_verified_at: now
+            });
+          } catch (updateError) {
+            lastError = updateError || lastError;
+            toast("확인 처리 실패: Supabase 서버 함수 수정이 필요합니다.");
+            return;
+          }
+        }
       }
-      toast("확인 시간을 갱신했습니다.");
       await loadLicenses();
+      const updated = rows.find(r => r.id === id);
+      const verifiedTime = dateTimeValue(updated && updated.last_verified_at);
+      if (verifiedTime && Math.abs(Date.now() - verifiedTime) < 5 * 60 * 1000) {
+        toast("확인 시간을 갱신했습니다.");
+      } else if (lastError) {
+        toast("버튼은 동작했지만 서버에서 최근 확인일 갱신이 막혔습니다.");
+      } else {
+        toast("확인 요청을 보냈습니다.");
+      }
     }
 
     async function resetDevice(id) {
