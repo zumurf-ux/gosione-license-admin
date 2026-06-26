@@ -278,6 +278,7 @@
       SUPABASE_URL: "https://ujmyjwxtsoazluyktwcl.supabase.co",
       SUPABASE_ANON_KEY: "sb_publishable_G4XQjZFkhaV6N_bVy65How_BlC5rQeE",
       ADMIN_FUNCTION_URL: "https://ujmyjwxtsoazluyktwcl.functions.supabase.co/license-admin",
+      LICENSE_VERIFY_URL: "https://ujmyjwxtsoazluyktwcl.functions.supabase.co/license-verify",
       PROJECT_REF: "ujmyjwxtsoazluyktwcl",
     };
     const supabaseClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
@@ -641,6 +642,14 @@ const PREF_KEYS = {
       return String(row?.app_name || "앱");
     }
 
+    function licenseAppId(row) {
+      const appId = String(row?.app_id || "").toLowerCase();
+      if (appId) return appId;
+      const appName = String(row?.app_name || "");
+      if (appName.includes("인건비서")) return "ingunbiseo";
+      return "gosione";
+    }
+
     function licenseMessage(row) {
       const appName = licenseAppName(row);
       return [
@@ -797,37 +806,32 @@ const PREF_KEYS = {
     async function manualVerifyLicense(id) {
       const row = rows.find(r => r.id === id);
       if (!row) return toast("라이선스 정보를 찾을 수 없습니다.");
+      if (!row.device_id) return toast("등록 기기가 없어 확인할 수 없습니다.");
       const now = new Date().toISOString();
       let lastError = null;
       toast("확인 처리 중입니다.");
       try {
-        await api({ action: "manual_verify", id, last_verified_at: now });
-      } catch (edgeError) {
-        lastError = edgeError;
+        const res = await fetch(CONFIG.LICENSE_VERIFY_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            license_key: row.license_key,
+            app_id: licenseAppId(row),
+            app_name: licenseAppName(row),
+            device_id: row.device_id,
+            admin_manual_check: true
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) throw new Error(data.message || "인증 확인 실패");
+      } catch (verifyError) {
+        lastError = verifyError;
         try {
-          const { error } = await supabaseClient
-            .from("licenses")
-            .update({ last_verified_at: now })
-            .eq("id", id);
-          if (error) throw error;
-        } catch (directError) {
-          lastError = directError || lastError;
-          try {
-            await api({
-              action: "update",
-              id,
-              customer_name: row.customer_name,
-              naver_id: row.naver_id,
-              customer_phone: row.customer_phone,
-              order_number: row.order_number,
-              memo: row.memo,
-              last_verified_at: now
-            });
-          } catch (updateError) {
-            lastError = updateError || lastError;
-            toast("확인 처리 실패: Supabase 서버 함수 수정이 필요합니다.");
-            return;
-          }
+          await api({ action: "manual_verify", id, last_verified_at: now });
+        } catch (edgeError) {
+          lastError = edgeError || lastError;
+          toast("확인 처리 실패: " + (lastError?.message || "Supabase 서버 함수 수정이 필요합니다."));
+          return;
         }
       }
       await loadLicenses();
