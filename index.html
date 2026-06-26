@@ -236,6 +236,7 @@
           <label>상태<select id="statusFilter" onchange="loadLicenses()"><option value="">전체</option><option value="unused">사용 전</option><option value="used">사용 중</option><option value="blocked">사용 정지</option></select></label>
           <label>앱<select id="appFilter" onchange="loadLicenses()"><option value="">전체 앱</option><option value="gosione">고시ONE</option><option value="ingunbiseo">인건비서</option></select></label>
           <label>&nbsp;<button class="btn" onclick="loadLicenses()">새로고침</button></label>
+          <label>&nbsp;<button class="btn primary" id="updatePopupAllBtn" onclick="requestUpdatePopupAll()">업데이트 팝업</button></label>
         </div>
       </section>
 
@@ -582,7 +583,6 @@ const PREF_KEYS = {
       return `<div class="actions">
         <button class="btn primary" type="button" onclick="copyLicenseMessage('${row.id}')">판매문구</button>
         <button class="btn green" type="button" onclick="openCertificate('${row.id}')">증서 발급</button>
-        <button class="btn" type="button" onclick="manualVerifyLicense('${row.id}')">확인</button>
         <button class="btn" type="button" onclick="resetDevice('${row.id}')">기기해제</button>
         <button class="btn" type="button" onclick="editCustomer('${row.id}')">고객수정</button>
         <button class="btn" type="button" onclick="editMemo('${row.id}')">메모수정</button>
@@ -802,24 +802,49 @@ const PREF_KEYS = {
       navigator.clipboard?.writeText(text).then(() => toast("복사했습니다."));
     }
 
-    async function manualVerifyLicense(id) {
-      const row = rows.find(r => r.id === id);
-      if (!row) return toast("라이선스 정보를 찾을 수 없습니다.");
-      if (!row.device_id) return toast("등록 기기가 없어 확인할 수 없습니다.");
-      toast("기기에 확인 요청을 보내는 중입니다.");
+    async function requestUpdatePopupAll() {
+      const button = document.getElementById("updatePopupAllBtn");
+      const oldText = button ? button.textContent : "";
+      if (!confirm("등록된 모든 기기에 업데이트 팝업 요청을 보낼까요?")) return;
+      if (button) {
+        button.disabled = true;
+        button.textContent = "요청 중...";
+      }
       try {
-        await api({
-          action: "request_device_check",
-          id,
-          license_key: row.license_key,
-          app_id: licenseAppId(row),
-          app_name: licenseAppName(row),
-          device_id: row.device_id
-        });
-        toast("기기에 수동 확인 요청을 보냈습니다.");
+        toast("전체 등록 기기 목록을 불러오는 중입니다.");
+        const body = await api({ action: "list", query: "", status: "", app_id: "" });
+        const allRows = body.rows || [];
+        const targets = allRows.filter(row => row.device_id);
+        if (!targets.length) {
+          toast("등록된 기기가 없습니다.");
+          return;
+        }
+        let success = 0;
+        let failed = 0;
+        for (const row of targets) {
+          try {
+            await api({
+              action: "request_device_check",
+              id: row.id,
+              license_key: row.license_key,
+              app_id: licenseAppId(row),
+              app_name: licenseAppName(row),
+              device_id: row.device_id
+            });
+            success++;
+          } catch (error) {
+            failed++;
+          }
+        }
+        toast(`업데이트 팝업 요청 완료: 성공 ${success}대${failed ? ` · 실패 ${failed}대` : ""}`);
         await loadLicenses();
       } catch (error) {
-        toast("확인 요청 실패: " + (error?.message || "Supabase 서버 함수 수정이 필요합니다."));
+        toast("업데이트 팝업 요청 실패: " + (error?.message || "요청 실패"));
+      } finally {
+        if (button) {
+          button.disabled = false;
+          button.textContent = oldText || "업데이트 팝업";
+        }
       }
     }
 
