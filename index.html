@@ -279,6 +279,10 @@
       SUPABASE_ANON_KEY: "sb_publishable_G4XQjZFkhaV6N_bVy65How_BlC5rQeE",
       ADMIN_FUNCTION_URL: "https://ujmyjwxtsoazluyktwcl.functions.supabase.co/license-admin",
       LICENSE_VERIFY_URL: "https://ujmyjwxtsoazluyktwcl.functions.supabase.co/license-verify",
+      GOSIONE_RELEASE_URL: "https://api.github.com/repos/zumurf-ux/gosione-download/releases/latest",
+      GOSIONE_DOWNLOAD_URL: "https://gosione.thedesignuncle.com/",
+      INGUNBISEO_RELEASE_URL: "https://api.github.com/repos/zumurf-ux/ingunbiseo-download/releases/latest",
+      INGUNBISEO_DOWNLOAD_URL: "https://ingunbiseo.thedesignuncle.com/",
       PROJECT_REF: "ujmyjwxtsoazluyktwcl",
     };
     const supabaseClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
@@ -650,6 +654,65 @@ const PREF_KEYS = {
       return "gosione";
     }
 
+    function appReleaseUrl(row) {
+      return licenseAppId(row) === "ingunbiseo" ? CONFIG.INGUNBISEO_RELEASE_URL : CONFIG.GOSIONE_RELEASE_URL;
+    }
+
+    function appDownloadUrl(row) {
+      return licenseAppId(row) === "ingunbiseo" ? CONFIG.INGUNBISEO_DOWNLOAD_URL : CONFIG.GOSIONE_DOWNLOAD_URL;
+    }
+
+    function installedAppVersion(row) {
+      return String(
+        row?.app_version ||
+        row?.last_app_version ||
+        row?.verified_app_version ||
+        row?.device_app_version ||
+        row?.client_version ||
+        row?.version ||
+        ""
+      ).replace(/^v/i, "").trim();
+    }
+
+    function releaseVersion(release) {
+      const raw = String(release?.tag_name || release?.name || "").trim();
+      const match = raw.match(/v?(\d+(?:\.\d+){1,3})/i);
+      return match ? match[1] : "";
+    }
+
+    function compareVersion(a, b) {
+      const pa = String(a || "").replace(/^v/i, "").split(".").map(n => parseInt(n, 10) || 0);
+      const pb = String(b || "").replace(/^v/i, "").split(".").map(n => parseInt(n, 10) || 0);
+      const len = Math.max(pa.length, pb.length);
+      for (let i = 0; i < len; i++) {
+        const av = pa[i] || 0;
+        const bv = pb[i] || 0;
+        if (av > bv) return 1;
+        if (av < bv) return -1;
+      }
+      return 0;
+    }
+
+    async function checkLicenseAppUpdate(row) {
+      const res = await fetch(appReleaseUrl(row) + "?t=" + Date.now(), {
+        cache: "no-store",
+        headers: { Accept: "application/vnd.github+json" }
+      });
+      if (!res.ok) throw new Error("업데이트 정보를 확인하지 못했습니다.");
+      const release = await res.json();
+      const latest = releaseVersion(release);
+      const installed = installedAppVersion(row);
+      if (!latest) return toast("업데이트 버전을 확인하지 못했습니다.");
+      if (installed && compareVersion(latest, installed) > 0) {
+        const go = confirm(`${licenseAppName(row)} 새 버전 ${latest}이 있습니다.\n현재 확인된 설치 버전: ${installed}\n다운로드 페이지로 이동할까요?`);
+        if (go) location.href = appDownloadUrl(row);
+      } else if (!installed) {
+        confirm(`${licenseAppName(row)} 최신 버전 ${latest}을 확인했습니다.\n관리페이지에 이 기기의 설치 버전 정보가 없어 업데이트 여부를 비교할 수 없습니다.\n다운로드 페이지를 열까요?`) && (location.href = appDownloadUrl(row));
+      } else {
+        toast(`${licenseAppName(row)} 업데이트 확인 완료: 최신 상태입니다.`);
+      }
+    }
+
     function licenseMessage(row) {
       const appName = licenseAppName(row);
       return [
@@ -843,6 +906,11 @@ const PREF_KEYS = {
         toast("버튼은 동작했지만 서버에서 최근 확인일 갱신이 막혔습니다.");
       } else {
         toast("확인 요청을 보냈습니다.");
+      }
+      try {
+        await checkLicenseAppUpdate(updated || row);
+      } catch (updateError) {
+        toast(updateError?.message || "업데이트 확인에 실패했습니다.");
       }
     }
 
