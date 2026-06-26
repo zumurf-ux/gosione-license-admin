@@ -28,6 +28,7 @@
     .grid { display:grid; gap:10px; }
     .grid.two { grid-template-columns:repeat(2,minmax(0,1fr)); }
     .grid.four { grid-template-columns:repeat(4,minmax(0,1fr)); }
+    .grid.five { grid-template-columns:1.2fr .8fr .8fr .65fr .65fr; }
     .grid.six { grid-template-columns:1.15fr .55fr repeat(4,minmax(0,1fr)); }
     label { color:var(--muted); font-size:12px; font-weight:700; display:grid; gap:6px; }
     input,select,textarea { width:100%; min-height:40px; border:1px solid var(--line); border-radius:10px; padding:9px 10px; background:#fff; color:var(--text); }
@@ -127,8 +128,10 @@
       .login { margin:7vh auto 0; }
       .grid.two { grid-template-columns:1fr; }
       .grid.four { grid-template-columns:1fr 1fr; }
+      .grid.five { grid-template-columns:1fr 1fr; }
       .grid.four label:first-child,
-      .grid.four label:last-child { grid-column:1/-1; }
+      .grid.four label:last-child,
+      .grid.five label:first-child { grid-column:1/-1; }
       .grid.six { grid-template-columns:minmax(0,1fr) 88px; }
       .grid.six label:nth-child(n+3) { grid-column:1/-1; }
       .summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -161,9 +164,10 @@
     }
     @media (max-width:420px) {
       .wrap { padding:10px; }
-      .grid.four,.grid.six,.toolbar { grid-template-columns:1fr; }
+      .grid.four,.grid.five,.grid.six,.toolbar { grid-template-columns:1fr; }
       .grid.four label:first-child,
       .grid.four label:last-child,
+      .grid.five label:first-child,
       .grid.six label:nth-child(n+3) { grid-column:auto; }
       .actions { grid-template-columns:1fr; }
       .license-card-head { flex-direction:column; }
@@ -231,7 +235,7 @@
       </section>
 
       <section class="panel filters">
-        <div class="grid four">
+        <div class="grid five">
           <label>검색<input id="query" placeholder="키, 고객명, 네이버ID, 연락처, 주문번호" oninput="debouncedLoad()"></label>
           <label>상태<select id="statusFilter" onchange="loadLicenses()"><option value="">전체</option><option value="unused">사용 전</option><option value="used">사용 중</option><option value="blocked">사용 정지</option></select></label>
           <label>앱<select id="appFilter" onchange="loadLicenses()"><option value="">전체 앱</option><option value="gosione">고시ONE</option><option value="ingunbiseo">인건비서</option></select></label>
